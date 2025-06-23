@@ -7,7 +7,7 @@ import javax.swing.border.Border;
 
 public class employee extends JFrame {
     JFrame frame = new JFrame("EMPLOYEE");
-    BackgroundImagePanel panel = new BackgroundImagePanel("/Users/mezbahuddinaqib/IdeaProjects/expense tracker gui/src/money_bg.JPG");
+    BackgroundImagePanel panel = new BackgroundImagePanel("C:\\Users\\Hp\\IdeaProjects\\MANAGE_EXPENSES-main\\src\\gui\\money_bg.jpg");
     JPanel buttonPanel = new JPanel(new GridLayout(10, 1, 0, 0));
 
     JLabel title = new JLabel("<html><center>WELCOME TO EMPLOYEE PANEL.<br>MANAGE EXPENSES WITH US.</center></html>");

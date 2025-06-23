@@ -10,19 +10,31 @@ import java.sql.*;
 import controller.database;
 
 public class DASHBOARD_WINDOW extends JFrame {
+    private java.util.List<String> currentExpenseProducts = new java.util.ArrayList<>();
+    private java.util.List<Double> currentExpenses = new java.util.ArrayList<>();
+    private double maxProductExpense = 0;
+
     private JComboBox<String> yearBox, monthBox, dayBox, viewTypeBox;
     private JLabel incomeLabel, expenseLabel;
     private JPanel chartPanel;
     private JTable employeeTable;
     private DefaultTableModel employeeModel;
 
+    // Fix: Class fields for use in inner classes
+    private double currentIncome, currentExpense, currentBudget;
+    private java.util.List<String> currentProducts = new java.util.ArrayList<>();
+    private java.util.List<Double> currentIncomes = new java.util.ArrayList<>();
+    private double maxProductIncome = 0;
+
     public DASHBOARD_WINDOW() {
-        setTitle("📊 Dashboard");
+
+
+        setTitle("Dashboard");
         setSize(1000, 700);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout());
-        getContentPane().setBackground(new Color(200, 230, 255)); // Light blue background
+        getContentPane().setBackground(new Color(200, 230, 255));
         setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
         UIManager.put("Label.font", new Font("Segoe UI", Font.PLAIN, 14));
@@ -30,10 +42,9 @@ public class DASHBOARD_WINDOW extends JFrame {
         UIManager.put("Table.font", new Font("Segoe UI", Font.PLAIN, 13));
         UIManager.put("TableHeader.font", new Font("Segoe UI", Font.BOLD, 14));
 
-        // Top panel
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
         topPanel.setBackground(new Color(180, 210, 255));
-        topPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        topPanel.setBorder(new EmptyBorder(30, 30, 30, 30));
 
         viewTypeBox = new JComboBox<>(new String[]{"Day", "Month", "Year"});
         yearBox = new JComboBox<>(getYears());
@@ -59,20 +70,35 @@ public class DASHBOARD_WINDOW extends JFrame {
 
         topPanel.add(incomeLabel);
         topPanel.add(expenseLabel);
+
+        JButton expenseProductBtn = new JButton("Expense by Product");
+        expenseProductBtn.addActionListener(e -> showExpenseByProductChart());
+        JButton overviewChartBtn = new JButton("Overview Chart");
+        topPanel.add(overviewChartBtn);
+        topPanel.add(expenseProductBtn);
+
+
+
+        JButton productIncomeBtn = new JButton("Income by Product");
+
+        overviewChartBtn.addActionListener(e -> calculateAndDisplay());
+        productIncomeBtn.addActionListener(e -> showIncomeByProductChart());
+
+
+        topPanel.add(productIncomeBtn);
+
         add(topPanel, BorderLayout.NORTH);
 
-        // Chart panel
         chartPanel = new JPanel();
         chartPanel.setBackground(new Color(220, 240, 255));
         add(chartPanel, BorderLayout.CENTER);
 
-        // Employee panel
         JPanel employeePanel = new JPanel(new BorderLayout(10, 10));
         employeePanel.setBackground(new Color(200, 230, 255));
         employeePanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         employeePanel.setPreferredSize(new Dimension(300, 0));
 
-        employeeModel = new DefaultTableModel(new String[]{"👤 Employee Username"}, 0);
+        employeeModel = new DefaultTableModel(new String[]{"Employee Username"}, 0);
         employeeTable = new JTable(employeeModel);
         styleTable(employeeTable);
 
@@ -82,18 +108,35 @@ public class DASHBOARD_WINDOW extends JFrame {
 
         employeePanel.add(empTitle, BorderLayout.NORTH);
         employeePanel.add(new JScrollPane(employeeTable), BorderLayout.CENTER);
+
+        JPanel lowStockPanel = new JPanel(new BorderLayout(10, 10));
+        lowStockPanel.setBackground(new Color(200, 230, 255));
+        lowStockPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        lowStockPanel.setPreferredSize(new Dimension(300, 200));
+
+        DefaultTableModel stockModel = new DefaultTableModel(new String[]{"Product", "Quantity"}, 0);
+        JTable stockTable = new JTable(stockModel);
+        styleTable(stockTable);
+
+        JLabel stockTitle = new JLabel("Low Stock (<100)");
+        stockTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        stockTitle.setHorizontalAlignment(SwingConstants.CENTER);
+
+        lowStockPanel.add(stockTitle, BorderLayout.NORTH);
+        lowStockPanel.add(new JScrollPane(stockTable), BorderLayout.CENTER);
+        employeePanel.add(lowStockPanel, BorderLayout.SOUTH);
+
         add(employeePanel, BorderLayout.EAST);
 
-        // Event listeners
         ActionListener filterListener = e -> calculateAndDisplay();
         viewTypeBox.addActionListener(filterListener);
         yearBox.addActionListener(filterListener);
         monthBox.addActionListener(filterListener);
         dayBox.addActionListener(filterListener);
 
-        // Initial load
         calculateAndDisplay();
         loadEmployees();
+        loadLowStockProducts(stockModel);
 
         setVisible(true);
     }
@@ -131,8 +174,7 @@ public class DASHBOARD_WINDOW extends JFrame {
     }
 
     private String[] getMonths() {
-        return new String[]{"01", "02", "03", "04", "05", "06",
-                "07", "08", "09", "10", "11", "12"};
+        return new String[]{"01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"};
     }
 
     private String[] getDays() {
@@ -142,6 +184,64 @@ public class DASHBOARD_WINDOW extends JFrame {
         }
         return days;
     }
+
+    private void showExpenseByProductChart() {
+        chartPanel.removeAll();
+        currentExpenseProducts.clear();
+        currentExpenses.clear();
+        maxProductExpense = 0;
+
+        try (Connection con = database.getConnection();
+             PreparedStatement stmt = con.prepareStatement(
+                     "SELECT category AS product_name, SUM(amount) AS total_expense FROM transactions WHERE type='Expense' GROUP BY category")) {
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String name = rs.getString("product_name");
+                double expense = rs.getDouble("total_expense");
+                currentExpenseProducts.add(name);
+                currentExpenses.add(expense);
+                if (expense > maxProductExpense) maxProductExpense = expense;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        JPanel expenseChart = new JPanel() {
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                int w = getWidth(), h = getHeight();
+
+                int barWidth = 40;
+                int spacing = 20;
+                int baseY = h - 80;
+                int chartHeight = h - 150;
+                int startX = 50;
+
+                for (int i = 0; i < currentExpenseProducts.size(); i++) {
+                    int barHeight = (int) ((currentExpenses.get(i) / maxProductExpense) * chartHeight);
+                    int x = startX + i * (barWidth + spacing);
+
+                    g2.setColor(new Color(255, 153, 153)); // soft red
+                    g2.fillRoundRect(x, baseY - barHeight, barWidth, barHeight, 10, 10);
+                    g2.setColor(Color.BLACK);
+
+                    String label = currentExpenseProducts.get(i);
+                    if (label.length() > 6) label = label.substring(0, 6) + "...";
+
+                    g2.drawString(label, x, baseY + 15);
+                    g2.drawString(String.format("%.0f", currentExpenses.get(i)), x, baseY - barHeight - 10);
+                }
+            }
+        };
+
+        chartPanel.setLayout(new BorderLayout());
+        chartPanel.add(expenseChart, BorderLayout.CENTER);
+        chartPanel.revalidate();
+        chartPanel.repaint();
+    }
+
 
     private void calculateAndDisplay() {
         String viewType = (String) viewTypeBox.getSelectedItem();
@@ -156,7 +256,9 @@ public class DASHBOARD_WINDOW extends JFrame {
             default -> "";
         };
 
-        double totalIncome = 0, totalExpense = 0, budget = 0;
+        currentIncome = 0;
+        currentExpense = 0;
+        currentBudget = 0;
 
         try (Connection con = database.getConnection()) {
             String sql = switch (viewType) {
@@ -170,26 +272,26 @@ public class DASHBOARD_WINDOW extends JFrame {
                 while (rs.next()) {
                     String type = rs.getString("type");
                     double amount = rs.getDouble("amount");
-                    if ("Income".equalsIgnoreCase(type)) totalIncome += amount;
-                    else if ("Expense".equalsIgnoreCase(type)) totalExpense += amount;
+                    if ("Income".equalsIgnoreCase(type)) currentIncome += amount;
+                    else if ("Expense".equalsIgnoreCase(type)) currentExpense += amount;
                 }
             }
 
             try (PreparedStatement budgetStmt = con.prepareStatement("SELECT budget FROM settings LIMIT 1");
                  ResultSet budgetRs = budgetStmt.executeQuery()) {
-                if (budgetRs.next()) budget = budgetRs.getDouble("budget");
+                if (budgetRs.next()) currentBudget = budgetRs.getDouble("budget");
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
 
-        incomeLabel.setText("Income: " + totalIncome);
-        expenseLabel.setText("Expense: " + totalExpense);
-        displayChart(totalIncome, totalExpense, budget);
+        incomeLabel.setText("Income: " + currentIncome);
+        expenseLabel.setText("Expense: " + currentExpense);
+        displayChart();
     }
 
-    private void displayChart(double income, double expense, double budget) {
+    private void displayChart() {
         chartPanel.removeAll();
 
         JPanel barChart = new JPanel() {
@@ -198,17 +300,17 @@ public class DASHBOARD_WINDOW extends JFrame {
                 Graphics2D g2 = (Graphics2D) g;
                 int w = getWidth(), h = getHeight();
 
-                double max = Math.max(income, Math.max(expense, budget));
+                double max = Math.max(currentIncome, Math.max(currentExpense, currentBudget));
                 int barWidth = 80, spacing = 70;
                 int baseX = 70, baseY = h - 80, chartHeight = h - 150;
 
-                int iBar = (int) ((income / max) * chartHeight);
-                int eBar = (int) ((expense / max) * chartHeight);
-                int bBar = (int) ((budget / max) * chartHeight);
+                int iBar = (int) ((currentIncome / max) * chartHeight);
+                int eBar = (int) ((currentExpense / max) * chartHeight);
+                int bBar = (int) ((currentBudget / max) * chartHeight);
 
-                drawBar(g2, "Income", baseX, iBar, baseY, barWidth, Color.BLUE, income);
-                drawBar(g2, "Expense", baseX + spacing + barWidth, eBar, baseY, barWidth, Color.RED, expense);
-                drawBar(g2, "Budget", baseX + 2 * (spacing + barWidth), bBar, baseY, barWidth, Color.GREEN.darker(), budget);
+                drawBar(g2, "Income", baseX, iBar, baseY, barWidth, Color.BLUE, currentIncome);
+                drawBar(g2, "Expense", baseX + spacing + barWidth, eBar, baseY, barWidth, Color.RED, currentExpense);
+                drawBar(g2, "Budget", baseX + 2 * (spacing + barWidth), bBar, baseY, barWidth, Color.GREEN.darker(), currentBudget);
             }
 
             void drawBar(Graphics2D g2, String label, int x, int height, int baseY, int width, Color color, double value) {
@@ -226,6 +328,63 @@ public class DASHBOARD_WINDOW extends JFrame {
         chartPanel.repaint();
     }
 
+    private void showIncomeByProductChart() {
+        chartPanel.removeAll();
+        currentProducts.clear();
+        currentIncomes.clear();
+        maxProductIncome = 0;
+
+        try (Connection con = database.getConnection();
+             PreparedStatement stmt = con.prepareStatement(
+                     "SELECT category AS product_name, SUM(amount) AS total_income FROM transactions WHERE type='Income' GROUP BY category")) {
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String name = rs.getString("product_name");
+                double income = rs.getDouble("total_income");
+                currentProducts.add(name);
+                currentIncomes.add(income);
+                if (income > maxProductIncome) maxProductIncome = income;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        JPanel productChart = new JPanel() {
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                int w = getWidth(), h = getHeight();
+
+                int barWidth = 40;
+                int spacing = 20;
+                int baseY = h - 80;
+                int chartHeight = h - 150;
+                int startX = 50;
+
+                for (int i = 0; i < currentProducts.size(); i++) {
+                    int barHeight = (int) ((currentIncomes.get(i) / maxProductIncome) * chartHeight);
+                    int x = startX + i * (barWidth + spacing);
+
+                    g2.setColor(new Color(102, 204, 255));
+                    g2.fillRoundRect(x, baseY - barHeight, barWidth, barHeight, 10, 10);
+                    g2.setColor(Color.BLACK);
+
+                    String label = currentProducts.get(i);
+                    if (label.length() > 6) label = label.substring(0, 6) + "...";
+
+                    g2.drawString(label, x, baseY + 15);
+                    g2.drawString(String.format("%.0f", currentIncomes.get(i)), x, baseY - barHeight - 10);
+                }
+            }
+        };
+
+        chartPanel.setLayout(new BorderLayout());
+        chartPanel.add(productChart, BorderLayout.CENTER);
+        chartPanel.revalidate();
+        chartPanel.repaint();
+    }
+
     private void loadEmployees() {
         employeeModel.setRowCount(0);
         try (Connection con = database.getConnection();
@@ -233,6 +392,19 @@ public class DASHBOARD_WINDOW extends JFrame {
              ResultSet rs = stmt.executeQuery("SELECT username FROM employee")) {
             while (rs.next()) {
                 employeeModel.addRow(new Object[]{rs.getString("username")});
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void loadLowStockProducts(DefaultTableModel stockModel) {
+        stockModel.setRowCount(0);
+        try (Connection con = database.getConnection();
+             PreparedStatement stmt = con.prepareStatement("SELECT product_name, quantity FROM inventory WHERE quantity < 100")) {
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                stockModel.addRow(new Object[]{rs.getString("product_name"), rs.getInt("quantity")});
             }
         } catch (SQLException e) {
             e.printStackTrace();

@@ -63,6 +63,11 @@ public class homepage extends JFrame {
             new employeeloginpage();
             dispose();
         });
+
+        aboutbutton.addActionListener(e -> {
+            new ABOUT_WINDOW();
+            dispose();
+        });
     }
 
     private void styleButton(JButton button, int y) {

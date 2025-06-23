@@ -31,16 +31,17 @@ public class VIEW_TRANSACTIONS_WINDOW extends JFrame {
     }
 
     private void loadTransactions() {
-        String[] columnNames = {"ID", "Type", "Category","quantity", "Amount","currency", "Date", "Notes", "Name", "Status"};
+        String[] columnNames = {"#", "Type", "Category", "Quantity", "Amount", "Currency", "Date", "Notes", "Name", "Status"};
         DefaultTableModel model = new DefaultTableModel(columnNames, 0);
 
         try (Connection conn = database.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT * FROM transactions ORDER BY date DESC");
              ResultSet rs = ps.executeQuery()) {
 
+            int count = 1;
             while (rs.next()) {
                 Object[] row = new Object[10];
-                row[0] = rs.getInt("id");
+                row[0] = count++;  // Sequential number
                 row[1] = rs.getString("type");
                 row[2] = rs.getString("category");
                 row[3] = rs.getInt("quantity");
@@ -60,4 +61,6 @@ public class VIEW_TRANSACTIONS_WINDOW extends JFrame {
             JOptionPane.showMessageDialog(this, "Error loading transactions: " + e.getMessage());
         }
     }
+
 }
+

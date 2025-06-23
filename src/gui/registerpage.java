@@ -15,8 +15,8 @@ public class registerpage extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(null);
-        getContentPane().setBackground(new Color(245, 250, 255));
-
+        //getContentPane().setBackground(new Color(245, 250, 255));
+        getContentPane().setBackground(new Color(200, 230, 255));
         JLabel label = new JLabel("Create New Account");
         label.setFont(new Font("Segoe UI", Font.BOLD, 24));
         label.setForeground(new Color(52, 73, 94));

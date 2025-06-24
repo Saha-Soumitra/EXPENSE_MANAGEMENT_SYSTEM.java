@@ -8,7 +8,7 @@ public class ABOUT_WINDOW extends JFrame {
     public ABOUT_WINDOW() {
         setTitle("About - Expense Management System");
         setSize(500, 420);
-        setLocationRelativeTo(null);
+        setLocationRelativeTo(null);  // puts the screen in the center
         setResizable(false);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         getContentPane().setBackground(new Color(240, 248, 255));

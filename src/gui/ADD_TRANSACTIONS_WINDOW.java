@@ -64,14 +64,14 @@ public class ADD_TRANSACTIONS_WINDOW extends JFrame {
 
         amountField = new JTextField();
         amountField.setBounds(150, 150, 200, 25);
-        amountField.setEditable(true); // auto-calculated for Income
+        amountField.setEditable(true);
         add(amountField);
 
         currencyLabel = new JLabel("");
         currencyLabel.setBounds(360, 150, 100, 25);
         add(currencyLabel);
 
-        // Quantity (Income only)
+
         quantityLabel = new JLabel("Quantity:");
         quantityLabel.setBounds(50, 190, 100, 25);
         add(quantityLabel);
@@ -85,7 +85,7 @@ public class ADD_TRANSACTIONS_WINDOW extends JFrame {
         });
         add(quantityField);
 
-        // Price per unit (Income only)
+
         priceLabel = new JLabel("Price/unit:");
         priceLabel.setBounds(50, 230, 100, 25);
         add(priceLabel);

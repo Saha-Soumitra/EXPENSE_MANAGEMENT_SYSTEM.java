@@ -1,103 +1,218 @@
+// SETTINGS_WINDOW.java
 package gui;
 
 import controller.database;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.sql.*;
-import java.math.BigDecimal;
+import java.util.*;
+import java.util.List;
 
 public class SETTINGS_WINDOW extends JFrame {
 
-    private JComboBox<String> currencyCombo;
-    private JTextField budgetField;
+    private JTable budgetTable;
+    private DefaultTableModel tableModel;
+    private JLabel totalBudgetLabel;
+    private JTextField totalBudgetField;
+    private JComboBox<String> monthCombo;
+    private JComboBox<Integer> yearCombo;
 
     public SETTINGS_WINDOW() {
-        setTitle("App Settings");
-        setSize(400, 300);
-        setLayout(null);
+        setTitle("Application Settings");
+        setSize(850, 550);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setLayout(null);
 
         initComponents();
-        loadSettings();
+
+        Calendar cal = Calendar.getInstance();
+        monthCombo.setSelectedIndex(cal.get(Calendar.MONTH));
+        yearCombo.setSelectedItem(cal.get(Calendar.YEAR));
+
+        loadBudgetsAndPrices();
         setVisible(true);
     }
 
     private void initComponents() {
         JLabel title = new JLabel("Settings");
         title.setFont(new Font("Segoe UI", Font.BOLD, 24));
-        title.setBounds(140, 20, 200, 30);
+        title.setBounds(360, 20, 200, 30);
         add(title);
 
-        JLabel currencyLabel = new JLabel("Currency:");
-        currencyLabel.setBounds(30, 80, 100, 25);
-        add(currencyLabel);
+        monthCombo = new JComboBox<>(new String[]{
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+        });
+        monthCombo.setBounds(350, 70, 120, 25);
+        add(monthCombo);
 
-        currencyCombo = new JComboBox<>(new String[]{"USD", "EUR", "GBP", "BDT", "INR"});
-        currencyCombo.setBounds(140, 80, 200, 25);
-        add(currencyCombo);
+        yearCombo = new JComboBox<>();
+        int currentYear = Calendar.getInstance().get(Calendar.YEAR);
+        for (int y = currentYear - 2; y <= currentYear + 5; y++) {
+            yearCombo.addItem(y);
+        }
+        yearCombo.setBounds(480, 70, 80, 25);
+        add(yearCombo);
 
-        JLabel budgetLabel = new JLabel("Monthly Budget:");
-        budgetLabel.setBounds(30, 130, 120, 25);
+        JLabel budgetLabel = new JLabel("Set Total Budget (BDT):");
+        budgetLabel.setBounds(30, 110, 160, 25);
         add(budgetLabel);
 
-        budgetField = new JTextField();
-        budgetField.setBounds(140, 130, 200, 25);
-        add(budgetField);
+        totalBudgetField = new JTextField();
+        totalBudgetField.setBounds(190, 110, 150, 25);
+        add(totalBudgetField);
 
-        JButton saveButton = new JButton("Save");
-        saveButton.setBounds(140, 190, 120, 35);
-        saveButton.setBackground(new Color(46, 204, 113));
+        tableModel = new DefaultTableModel(new String[]{
+                "Category", "Company", "Buying Price (BDT)", "Selling Price (BDT)"
+        }, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return column == 3;
+            }
+        };
+
+        budgetTable = new JTable(tableModel);
+        JScrollPane scrollPane = new JScrollPane(budgetTable);
+        scrollPane.setBounds(30, 150, 780, 300);
+        add(scrollPane);
+
+        JButton saveButton = new JButton("Save Settings");
+        saveButton.setBounds(360, 470, 140, 35);
+        saveButton.setBackground(new Color(0, 123, 255));
         saveButton.setForeground(Color.WHITE);
+        saveButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
         add(saveButton);
 
-        saveButton.addActionListener(e -> saveSettings());
+        totalBudgetLabel = new JLabel("Current Total Budget: 0.00 BDT");
+        totalBudgetLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        totalBudgetLabel.setBounds(30, 520, 350, 25);
+        add(totalBudgetLabel);
+
+        saveButton.addActionListener(e -> saveBudgetsAndPrices());
+        monthCombo.addActionListener(e -> loadBudgetsAndPrices());
+        yearCombo.addActionListener(e -> loadBudgetsAndPrices());
     }
 
-    private void loadSettings() {
+    private void loadBudgetsAndPrices() {
+        tableModel.setRowCount(0);
+        int selectedMonth = monthCombo.getSelectedIndex() + 1;
+        int selectedYear = (Integer) yearCombo.getSelectedItem();
+
         try (Connection conn = database.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT currency, budget FROM settings ORDER BY id DESC LIMIT 1")) {
-            if (rs.next()) {
-                currencyCombo.setSelectedItem(rs.getString("currency"));
-                budgetField.setText(rs.getBigDecimal("budget").toString());
+             Statement stmt = conn.createStatement()) {
+
+            double totalBudget = 0;
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT SUM(budget) AS total FROM category_budgets " +
+                            "WHERE month = " + selectedMonth + " AND year = " + selectedYear)) {
+                if (rs.next()) {
+                    totalBudget = rs.getDouble("total");
+                }
             }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error loading settings: " + ex.getMessage());
+
+            totalBudgetField.setText(String.format("%.2f", totalBudget));
+            totalBudgetLabel.setText("Current Total Budget: " + String.format("%.2f BDT", totalBudget));
+
+            try (ResultSet rsCategories = stmt.executeQuery("SELECT name FROM categories")) {
+                while (rsCategories.next()) {
+                    String category = rsCategories.getString("name");
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "SELECT company_name, price, selling_price FROM companies WHERE category_name = ?")) {
+                        ps.setString(1, category);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                tableModel.addRow(new Object[]{
+                                        category,
+                                        rs.getString("company_name"),
+                                        rs.getDouble("price"),
+                                        rs.getDouble("selling_price")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
         }
     }
 
-    private void saveSettings() {
-        String currency = (String) currencyCombo.getSelectedItem();
-        String budgetText = budgetField.getText().trim();
+    private void saveBudgetsAndPrices() {
+        int selectedMonth = monthCombo.getSelectedIndex() + 1;
+        int selectedYear = (Integer) yearCombo.getSelectedItem();
+        String budgetText = totalBudgetField.getText().trim();
+        double totalBudget;
 
-        if (currency == null || budgetText.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Fill both currency and budget.");
-            return;
-        }
-
-        BigDecimal budget;
         try {
-            budget = new BigDecimal(budgetText);
-            if (budget.compareTo(BigDecimal.ZERO) < 0) throw new NumberFormatException();
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Invalid budget. Enter a positive number.");
+            totalBudget = Double.parseDouble(budgetText);
+            if (totalBudget < 0) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Invalid total budget value.");
             return;
         }
 
         try (Connection conn = database.getConnection()) {
             conn.setAutoCommit(false);
-            conn.createStatement().executeUpdate("DELETE FROM settings");
-            PreparedStatement ps = conn.prepareStatement("INSERT INTO settings (currency, budget) VALUES (?, ?)");
-            ps.setString(1, currency);
-            ps.setBigDecimal(2, budget);
-            ps.executeUpdate();
-            conn.commit();
 
-            JOptionPane.showMessageDialog(this, "Settings updated.");
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error saving settings: " + ex.getMessage());
+            // Clear previous month-year budgets
+            try (PreparedStatement del = conn.prepareStatement(
+                    "DELETE FROM category_budgets WHERE month = ? AND year = ?")) {
+                del.setInt(1, selectedMonth);
+                del.setInt(2, selectedYear);
+                del.executeUpdate();
+            }
+
+            List<String> categories = new ArrayList<>();
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT name FROM categories")) {
+                while (rs.next()) {
+                    categories.add(rs.getString("name"));
+                }
+            }
+
+            double perCategory = totalBudget / categories.size();
+            try (PreparedStatement ins = conn.prepareStatement(
+                    "INSERT INTO category_budgets (category_name, budget, month, year) VALUES (?, ?, ?, ?)")) {
+                for (String cat : categories) {
+                    ins.setString(1, cat);
+                    ins.setDouble(2, perCategory);
+                    ins.setInt(3, selectedMonth);
+                    ins.setInt(4, selectedYear);
+                    ins.addBatch();
+                }
+                ins.executeBatch();
+            }
+
+            // Update selling prices
+            try (PreparedStatement upd = conn.prepareStatement(
+                    "UPDATE companies SET selling_price = ? WHERE category_name = ? AND company_name = ?")) {
+                for (int i = 0; i < tableModel.getRowCount(); i++) {
+                    String cat = tableModel.getValueAt(i, 0).toString();
+                    String comp = tableModel.getValueAt(i, 1).toString();
+                    double sellPrice = Double.parseDouble(tableModel.getValueAt(i, 3).toString());
+                    if (sellPrice < 0) throw new NumberFormatException();
+                    upd.setDouble(1, sellPrice);
+                    upd.setString(2, cat);
+                    upd.setString(3, comp);
+                    upd.addBatch();
+                }
+                upd.executeBatch();
+            }
+
+            conn.commit();
+            totalBudgetLabel.setText("Current Total Budget: " + String.format("%.2f BDT", totalBudget));
+            JOptionPane.showMessageDialog(this, "✅ Settings saved successfully!");
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error saving settings: " + e.getMessage());
         }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(SETTINGS_WINDOW::new);
     }
 }

@@ -1,150 +1,221 @@
 package gui;
 
+import controller.database;
+
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableCellRenderer;
+import javax.swing.table.*;
 import java.awt.*;
+import java.awt.event.*;
 import java.sql.*;
-import java.util.Vector;
+import java.util.Calendar;
 
 public class INVENTORY_WINDOW extends JFrame {
 
-    private JTable inventoryTable;
-    private DefaultTableModel tableModel;
+    private JTable categoryTable;
+    private DefaultTableModel categoryModel;
 
     public INVENTORY_WINDOW() {
-        setTitle("Inventory Manager");
-        setSize(850, 500);
-        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setTitle("Inventory Dashboard");
+        setSize(650, 450);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        // Top panel
-        JPanel topPanel = new JPanel(new GridLayout(2, 1));
-        topPanel.setBackground(new Color(240, 248, 255));
+        // Table model
+        categoryModel = new DefaultTableModel(new String[]{"Category", "Quantity"}, 0) {
+            @Override
+            public boolean isCellEditable(int r, int c) {
+                return false;
+            }
+        };
 
-        JLabel title = new JLabel("Inventory Management System", SwingConstants.CENTER);
-        title.setFont(new Font("Verdana", Font.BOLD, 24));
-        title.setForeground(new Color(52, 152, 219));
-        topPanel.add(title);
+        // Table UI
+        categoryTable = new JTable(categoryModel);
+        categoryTable.setRowHeight(28);
+        categoryTable.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        categoryTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 14));
 
-        // Button panel
-        JPanel inputPanel = new JPanel(new FlowLayout());
-        inputPanel.setBackground(new Color(245, 255, 250));
+        categoryTable.getColumnModel().getColumn(1).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public void setValue(Object val) {
+                try {
+                    int qty = Integer.parseInt(val.toString());
+                    setText(String.valueOf(qty));
+                    setForeground(qty < 100 ? Color.RED : Color.BLACK);
+                } catch (Exception e) {
+                    setText("N/A");
+                }
+            }
+        });
 
-        JButton btnChangeQty = new JButton("Change Product Quantity");
-        styleButton(btnChangeQty, new Color(52, 152, 219));
-        inputPanel.add(btnChangeQty);
-
-        topPanel.add(inputPanel);
-        add(topPanel, BorderLayout.NORTH);
-
-        // Table setup
-        tableModel = new DefaultTableModel(new String[]{"Product Name", "Quantity"}, 0);
-        inventoryTable = new JTable(tableModel);
-        inventoryTable.setRowHeight(25);
-        inventoryTable.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        JScrollPane scrollPane = new JScrollPane(inventoryTable);
+        JScrollPane scrollPane = new JScrollPane(categoryTable);
         add(scrollPane, BorderLayout.CENTER);
 
-        // Listener
-        btnChangeQty.addActionListener(e -> changeProductQuantity());
+        JLabel infoLabel = new JLabel("Double-click a category to manage. Quantities update automatically.");
+        infoLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        infoLabel.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
+        add(infoLabel, BorderLayout.SOUTH);
 
-        loadInventory();
+        categoryTable.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && categoryTable.getSelectedRow() != -1) {
+                    String cat = categoryModel.getValueAt(categoryTable.getSelectedRow(), 0).toString();
+                    showCompanyDetails(cat);
+                }
+            }
+        });
+
+        addWindowFocusListener(new WindowAdapter() {
+            public void windowGainedFocus(WindowEvent e) {
+                loadCategoryInventory();
+            }
+        });
+
+        loadCategoryInventory();
         setVisible(true);
     }
 
-    private void styleButton(JButton btn, Color bg) {
-        btn.setFocusPainted(false);
-        btn.setBackground(bg);
-        btn.setForeground(Color.WHITE);
-        btn.setFont(new Font("Arial", Font.BOLD, 13));
-    }
-
-    private void changeProductQuantity() {
-        String nameInput = JOptionPane.showInputDialog(this, "Enter Product Name:");
-        if (nameInput == null || nameInput.trim().isEmpty()) return;
-
-        String name = nameInput.trim().toUpperCase();
-
-        try (Connection conn = controller.database.getConnection()) {
-            String selectQuery = "SELECT quantity FROM inventory WHERE UPPER(product_name) = ?";
-            PreparedStatement ps = conn.prepareStatement(selectQuery);
-            ps.setString(1, name);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-                int currentQty = rs.getInt("quantity");
-
-                String qtyStr = JOptionPane.showInputDialog(this, "Enter Quantity to Add:");
-                if (qtyStr == null || qtyStr.trim().isEmpty()) return;
-
-                try {
-                    int qtyToAdd = Integer.parseInt(qtyStr.trim());
-                    int newQty = currentQty + qtyToAdd;
-
-                    String updateQuery = "UPDATE inventory SET quantity = ? WHERE UPPER(product_name) = ?";
-                    PreparedStatement updatePs = conn.prepareStatement(updateQuery);
-                    updatePs.setInt(1, newQty);
-                    updatePs.setString(2, name);
-                    updatePs.executeUpdate();
-
-                    JOptionPane.showMessageDialog(this, "Quantity updated.");
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(this, "Quantity must be a number.");
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Product not found.");
-            }
-
-            loadInventory();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
-        }
-    }
-
-    private void loadInventory() {
-        tableModel.setRowCount(0);
-        try (Connection conn = controller.database.getConnection()) {
-            String query = "SELECT product_name, quantity FROM inventory";
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery(query);
-
+    private void loadCategoryInventory() {
+        categoryModel.setRowCount(0);
+        try (Connection conn = database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT name, quantity FROM categories ORDER BY name");
+             ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                Vector<Object> row = new Vector<>();
-                row.add(rs.getString("product_name"));
-                row.add(rs.getInt("quantity"));
-                tableModel.addRow(row);
+                categoryModel.addRow(new Object[]{
+                        rs.getString("name"),
+                        rs.getInt("quantity")
+                });
             }
-
-            inventoryTable.getColumnModel().getColumn(1).setCellRenderer(new TableCellRenderer() {
-                @Override
-                public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                               boolean hasFocus, int row, int column) {
-                    JLabel label = new JLabel(value.toString());
-                    label.setOpaque(true);
-                    label.setHorizontalAlignment(JLabel.CENTER);
-
-                    int quantity = (int) value;
-                    if (quantity < 100) {
-                        label.setForeground(Color.RED);
-                    } else {
-                        label.setForeground(Color.BLACK);
-                    }
-
-                    if (isSelected) {
-                        label.setBackground(table.getSelectionBackground());
-                    } else {
-                        label.setBackground(Color.WHITE);
-                    }
-
-                    return label;
-                }
-            });
-
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error loading inventory: " + ex.getMessage());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading categories: " + e.getMessage());
         }
+    }
+
+    private void updateCategoryQuantity(String cat, int qty) {
+        try (Connection conn = database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE categories SET quantity = ? WHERE name = ?")) {
+            ps.setInt(1, qty);
+            ps.setString(2, cat);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error updating category qty: " + e.getMessage());
+        }
+    }
+
+    private void showCompanyDetails(String categoryName) {
+        JFrame detail = new JFrame("Manage Inventory - " + categoryName);
+        detail.setSize(600, 420);
+        detail.setLocationRelativeTo(this);
+        detail.setLayout(new BorderLayout());
+
+        DefaultTableModel compModel = new DefaultTableModel(
+                new String[]{"Company", "Price (BDT)", "Quantity"}, 0) {
+            @Override
+            public boolean isCellEditable(int r, int c) {
+                return false;
+            }
+        };
+
+        JTable compTable = new JTable(compModel);
+        compTable.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        compTable.setRowHeight(26);
+        compTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 14));
+
+        try (Connection conn = database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT company_name, price, quantity FROM companies WHERE category_name = ? ORDER BY company_name")) {
+            ps.setString(1, categoryName);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    compModel.addRow(new Object[]{
+                            rs.getString("company_name"),
+                            rs.getDouble("price"),
+                            rs.getInt("quantity")
+                    });
+                }
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading companies: " + e.getMessage());
+        }
+
+        JButton buyButton = new JButton("Buy Selected");
+        buyButton.setBackground(new Color(46, 204, 113));
+        buyButton.setForeground(Color.WHITE);
+        buyButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        buyButton.addActionListener(e -> {
+            int row = compTable.getSelectedRow();
+            if (row < 0) return;
+
+            String company = compModel.getValueAt(row, 0).toString();
+            double price = (double) compModel.getValueAt(row, 1);
+            int currentQty = (int) compModel.getValueAt(row, 2);
+
+            try (Connection conn = database.getConnection()) {
+                conn.setAutoCommit(false);
+
+                String input = JOptionPane.showInputDialog(detail,
+                        String.format("Enter quantity to buy (BDT %.2f each):", price));
+                if (input == null) return;
+
+                int qtyToBuy;
+                try {
+                    qtyToBuy = Integer.parseInt(input);
+                    if (qtyToBuy <= 0) throw new NumberFormatException();
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(detail, "Invalid quantity.");
+                    return;
+                }
+
+                double cost = qtyToBuy * price;
+
+                // Update company quantity
+                int newQty = currentQty + qtyToBuy;
+                try (PreparedStatement psUpdateCompany = conn.prepareStatement(
+                        "UPDATE companies SET quantity = ? WHERE category_name = ? AND company_name = ?")) {
+                    psUpdateCompany.setInt(1, newQty);
+                    psUpdateCompany.setString(2, categoryName);
+                    psUpdateCompany.setString(3, company);
+                    psUpdateCompany.executeUpdate();
+                }
+
+                // Update category quantity
+                int totalCatQty = 0;
+                try (PreparedStatement psTotal = conn.prepareStatement(
+                        "SELECT SUM(quantity) FROM companies WHERE category_name = ?")) {
+                    psTotal.setString(1, categoryName);
+                    try (ResultSet rs = psTotal.executeQuery()) {
+                        if (rs.next()) totalCatQty = rs.getInt(1);
+                    }
+                }
+
+                updateCategoryQuantity(categoryName, totalCatQty);
+                conn.commit();
+
+                compModel.setValueAt(newQty, row, 2);
+                loadCategoryInventory();
+
+                JOptionPane.showMessageDialog(detail,
+                        "✅ Purchase successful!\nCost: BDT " + cost);
+
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(detail, "Error during purchase: " + ex.getMessage());
+                ex.printStackTrace();
+            }
+        });
+
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        bottomPanel.add(buyButton);
+
+        detail.add(new JScrollPane(compTable), BorderLayout.CENTER);
+        detail.add(bottomPanel, BorderLayout.SOUTH);
+        detail.setVisible(true);
+    }
+
+    private String getMonthName(int month) {
+        return new java.text.DateFormatSymbols().getMonths()[month - 1];
     }
 
     public static void main(String[] args) {

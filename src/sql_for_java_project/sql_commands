@@ -49,10 +49,38 @@ CREATE TABLE transactions (
     status VARCHAR(50),
     PRIMARY KEY (id)
 );
+
+--INVENTORY TABLE
 CREATE TABLE inventory (
-     product_name VARCHAR(100) NOT NULL,
-     quantity INT NOT NULL
-     );
-ALTER TABLE transactions
-ADD COLUMN quantity INTEGER;
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(255) NOT NULL,
+    quantity INT DEFAULT 0,
+    category_name VARCHAR(255) NOT NULL,
+    company_name VARCHAR(255) NOT NULL,
+    FOREIGN KEY (category_name) REFERENCES categories(name) ON DELETE CASCADE,
+    FOREIGN KEY (company_name) REFERENCES companies(company_name) ON DELETE CASCADE,
+    UNIQUE (product_name, company_name, category_name)
+);
+
+
+
+-- Categories table
+CREATE TABLE categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE
+);
+
+-- Companies table
+CREATE TABLE companies (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_name VARCHAR(255) NOT NULL,
+    category_name VARCHAR(255) NOT NULL,
+    FOREIGN KEY (category_name) REFERENCES categories(name) ON DELETE CASCADE,
+    UNIQUE (company_name, category_name)
+);
+
+CREATE TABLE category_budgets (
+    category_name VARCHAR(255) PRIMARY KEY,
+    budget DOUBLE NOT NULL
+);
 
